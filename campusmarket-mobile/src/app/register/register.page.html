@@ -1,0 +1,83 @@
+<ion-header [translucent]="true">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/login"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Crear Cuenta</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" class="ion-padding">
+  <div class="register-container">
+    <div class="ion-text-center ion-margin-bottom">
+      <div class="register-header">
+        <div class="register-logo"></div>
+        <h1>Crear Cuenta</h1>
+      </div>
+      <p>Únete a CampusMarket</p>
+    </div>
+
+    <div class="ion-padding-bottom">
+      <ion-segment [(ngModel)]="userData.Rol" color="primary">
+        <ion-segment-button value="Comprador">
+          <ion-label>Comprador</ion-label>
+        </ion-segment-button>
+        <ion-segment-button value="Vendedor">
+          <ion-label>Vendedor</ion-label>
+        </ion-segment-button>
+      </ion-segment>
+    </div>
+
+    <ion-card>
+      <ion-card-content>
+        <ion-item lines="full">
+          <ion-label position="floating">Nombre</ion-label>
+          <ion-input type="text" [(ngModel)]="userData.Nombre" required></ion-input>
+        </ion-item>
+
+        <ion-item lines="full">
+          <ion-label position="floating">Apellido Paterno</ion-label>
+          <ion-input type="text" [(ngModel)]="userData.Apellido_Paterno" required></ion-input>
+        </ion-item>
+
+        <ion-item lines="full">
+          <ion-label position="floating">Apellido Materno</ion-label>
+          <ion-input type="text" [(ngModel)]="userData.Apellido_Materno"></ion-input>
+        </ion-item>
+
+        <div class="input-group">
+          <ion-item lines="full" class="email-item">
+            <ion-label position="floating">Correo Electrónico</ion-label>
+            <ion-input type="email" [(ngModel)]="userData.Email" required [disabled]="codeSent"></ion-input>
+          </ion-item>
+          <div class="send-btn-container" *ngIf="!codeSent || countdown > 0">
+            <ion-button fill="clear" size="small" (click)="sendCode()" [disabled]="countdown > 0" class="send-code-btn">
+              {{ codeSent ? 'Reenviar en ' + countdown + 's' : 'Enviar Código de Verificación' }}
+            </ion-button>
+          </div>
+        </div>
+
+        <div class="verification-wrapper" *ngIf="codeSent">
+          <ion-item lines="full" class="code-item">
+            <ion-label position="stacked">Código de Verificación</ion-label>
+            <ion-input type="text" [(ngModel)]="userData.verificationCode" maxlength="6" required></ion-input>
+            <ion-icon name="checkmark-circle" slot="end" color="success"
+              *ngIf="userData.verificationCode.length === 6"></ion-icon>
+          </ion-item>
+          <p class="code-hint">Revisa tu bandeja de entrada o spam.</p>
+        </div>
+
+        <ion-item lines="full">
+          <ion-label position="floating">Contraseña</ion-label>
+          <ion-input type="password" [(ngModel)]="userData.Contrasena" required></ion-input>
+        </ion-item>
+
+        <div class="ion-margin-top">
+          <ion-button expand="block" (click)="onRegister()">
+            Registrarse
+          </ion-button>
+        </div>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>

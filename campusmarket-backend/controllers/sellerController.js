@@ -1,0 +1,359 @@
+const User = require('../models/User');
+const Product = require('../models/Product');
+const { pool } = require('../config/database');
+const supabase = require('../config/supabaseClient');
+const path = require('path');
+
+/**
+ * Helper para subir a Supabase
+ */
+const uploadToSupabase = async (file, prefix = 'product') => {
+    const fileName = `${prefix}-${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
+
+    const { data, error } = await supabase.storage
+        .from('images')
+        .upload(fileName, file.buffer, {
+            contentType: file.mimetype,
+            upsert: false
+        });
+
+    if (error) throw error;
+
+    const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(fileName);
+
+    return publicUrl;
+};
+
+/**
+ * 1. Obtener productos del vendedor (Para el Dashboard)
+ */
+exports.getMyProducts = async (req, res) => {
+    try {
+        // Obtener ID Vendedor
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+        if (!vendorProfile) {
+            return res.status(404).json({ message: 'Vendedor no encontrado.' });
+        }
+
+        // Consultar productos
+        const { rows: products } = await pool.query(
+            'SELECT * FROM producto WHERE "ID_Vendedor" = $1 ORDER BY "ID_Producto" DESC',
+            [vendorProfile.ID_Vendedor]
+        );
+
+        res.status(200).json(products);
+    } catch (error) {
+        console.error('Error en getMyProducts:', error);
+        res.status(500).json({ message: 'Error al obtener productos.' });
+    }
+};
+
+/**
+ * 2. Borrar producto
+ */
+exports.deleteProduct = async (req, res) => {
+    try {
+        const productId = req.params.id;
+        await pool.query('DELETE FROM producto WHERE "ID_Producto" = $1', [productId]);
+        res.status(200).json({ message: 'Producto eliminado.' });
+    } catch (error) {
+        console.error('Error en deleteProduct:', error);
+        res.status(500).json({ message: 'Error al eliminar producto.' });
+    }
+};
+
+/**
+ * 3. Convertirse en Vendedor
+ */
+exports.becomeSeller = async (req, res) => {
+    const userId = req.user.ID_Usuario;
+    const { Nombre_Tienda } = req.body;
+
+    if (!Nombre_Tienda) return res.status(400).json({ message: 'Nombre de tienda requerido.' });
+
+    try {
+        if (req.user.Rol === 'Vendedor') return res.status(400).json({ message: 'Ya eres vendedor.' });
+
+        await User.becomeSeller(userId, req.body);
+        res.status(201).json({ message: 'Perfil de vendedor creado.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error interno.' });
+    }
+};
+
+/**
+ * 4. Actualizar Perfil (Texto)
+ */
+exports.updateSellerProfile = async (req, res) => {
+    try {
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+        if (!vendorProfile) return res.status(404).json({ message: 'No encontrado.' });
+
+        // Normalizar nombres de campos del frontend
+        const normalizedData = {
+            Nombre_Tienda: req.body.nombre_tienda || req.body.Nombre_Tienda,
+            Descripcion_Tienda: req.body.descripcion_tienda || req.body.Descripcion_Tienda,
+            Tiempo_Arrepentimiento_Min: req.body.tiempo_arrepentimiento_min,
+            Tiempo_Retraso_Comida_Min: req.body.tiempo_retraso_comida_min,
+            Numero_Tarjeta: req.body.numero_tarjeta || req.body.Numero_Tarjeta,
+            Nombre_Banco: req.body.nombre_banco || req.body.Nombre_Banco,
+            Nombre_Cuenta: req.body.nombre_cuenta || req.body.Nombre_Cuenta,
+            PayPal_Email: req.body.paypal_email || req.body.PayPal_Email,
+            Transferencia_Activo: req.body.transferencia_activo,
+            PayPal_Activo: req.body.paypal_activo
+        };
+
+        // Validaciones de Métodos de Pago
+        if (req.body.transferencia_activo) {
+            if (!normalizedData.Nombre_Banco || !normalizedData.Nombre_Cuenta || !normalizedData.Numero_Tarjeta) {
+                return res.status(400).json({ message: 'Para activar transferencias, debes completar Banco, Titular y Número de Tarjeta/CLABE.' });
+            }
+        }
+
+        if (req.body.paypal_activo) {
+            if (!normalizedData.PayPal_Email) {
+                return res.status(400).json({ message: 'Para activar PayPal, debes ingresar tu correo electrónico vinculado.' });
+            }
+        }
+
+        await User.updateSellerProfile(vendorProfile.ID_Vendedor, normalizedData);
+        res.status(200).json({ message: 'Perfil actualizado.' });
+    } catch (error) {
+        console.error('Error en updateSellerProfile:', error);
+        res.status(500).json({ message: 'Error interno.' });
+    }
+};
+
+/**
+ * 5. Subir Foto de Perfil
+ */
+exports.uploadSellerPhoto = async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'No hay imagen.' });
+
+    try {
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+        if (!vendorProfile) return res.status(404).json({ message: 'Vendedor no encontrado.' });
+
+        const photoUrl = await uploadToSupabase(req.file, 'seller-photo');
+        await pool.query('UPDATE vendedor SET "Foto_Perfil" = $1 WHERE "ID_Vendedor" = $2', [photoUrl, vendorProfile.ID_Vendedor]);
+
+        res.status(200).json({ message: 'Foto actualizada', photoUrl });
+    } catch (error) {
+        console.error('Error en uploadSellerPhoto:', error);
+        res.status(500).json({ message: 'Error al subir o guardar foto.' });
+    }
+};
+
+/**
+ * 5b. Subir Banner de Tienda
+ */
+exports.uploadSellerBanner = async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'No hay imagen.' });
+
+    try {
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+        if (!vendorProfile) return res.status(404).json({ message: 'Vendedor no encontrado.' });
+
+        const bannerUrl = await uploadToSupabase(req.file, 'seller-banner');
+        await pool.query('UPDATE vendedor SET "Banner_URL" = $1 WHERE "ID_Vendedor" = $2', [bannerUrl, vendorProfile.ID_Vendedor]);
+
+        res.status(200).json({ message: 'Banner actualizado', bannerUrl });
+    } catch (error) {
+        console.error('Error en uploadSellerBanner:', error);
+        res.status(500).json({ message: 'Error al subir o guardar banner.' });
+    }
+};
+
+/**
+ * 6. Obtener Perfil Completo
+ */
+exports.getSellerProfile = async (req, res) => {
+    try {
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+
+        if (!vendorProfile) {
+            return res.status(404).json({ message: 'Perfil de vendedor no encontrado.' });
+        }
+
+        // Devolvemos los datos para pintar el Sidebar
+        // Devolvemos los datos para pintar el Sidebar y el Dashboard
+        res.status(200).json({
+            nombre_tienda: vendorProfile.Nombre_Tienda,
+            foto: vendorProfile.Foto_Perfil, // Si el vendedor tiene una específica
+            imagen_url: req.user.Imagen_URL, // De la tabla usuario
+            banner_url: vendorProfile.Banner_URL,
+            descripcion: vendorProfile.Descripcion_Tienda,
+            numero_tarjeta: vendorProfile.Numero_Tarjeta,
+            nombre_banco: vendorProfile.Nombre_Banco,
+            nombre_cuenta: vendorProfile.Nombre_Cuenta,
+            paypal_email: vendorProfile.PayPal_Email,
+            transferencia_activo: vendorProfile.Transferencia_Activo,
+            paypal_activo: vendorProfile.PayPal_Activo
+        });
+
+    } catch (error) {
+        console.error('Error en getSellerProfile:', error);
+        res.status(500).json({ message: 'Error al cargar perfil.' });
+    }
+};
+
+/**
+ * 7. Obtener Estadísticas del Dashboard (RF-V-Dashboard)
+ * Endpoint: GET /api/seller/stats
+ */
+exports.getDashboardStats = async (req, res) => {
+    try {
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+        if (!vendorProfile) {
+            return res.status(404).json({ message: 'Vendedor no encontrado.' });
+        }
+        const idVendedor = vendorProfile.ID_Vendedor;
+
+        // Ejecutamos consultas en paralelo para mayor velocidad
+        const [
+            totalSalesResult,
+            completedOrdersResult,
+            pendingOrdersResult,
+            activeProductsResult
+        ] = await Promise.all([
+            // 1. Ingresos Totales (Solo pedidos Entregados)
+            pool.query(
+                `SELECT COALESCE(SUM("Precio_Total"), 0) AS total 
+                 FROM pedido 
+                 WHERE "ID_Vendedor" = $1 AND "Estado_Pedido" = 'Entregado'`,
+                [idVendedor]
+            ),
+            // 2. Pedidos Totales (No cancelados)
+            pool.query(
+                `SELECT COUNT(*) AS count 
+                 FROM pedido 
+                 WHERE "ID_Vendedor" = $1 AND "Estado_Pedido" != 'Cancelado'`,
+                [idVendedor]
+            ),
+            // 3. Pedidos Pendientes (Pendiente, En preparacion, o En camino)
+            pool.query(
+                `SELECT COUNT(*) AS count 
+                 FROM pedido 
+                 WHERE "ID_Vendedor" = $1 AND "Estado_Pedido" IN ('Pendiente', 'En preparacion', 'En camino')`,
+                [idVendedor]
+            ),
+            // 4. Productos Activos
+            pool.query(
+                `SELECT COUNT(*) AS count 
+                 FROM producto 
+                 WHERE "ID_Vendedor" = $1 AND "Activo" = TRUE`,
+                [idVendedor]
+            )
+        ]);
+
+        res.status(200).json({
+            ingresos_totales: Number(totalSalesResult.rows[0].total),
+            pedidos_completados: Number(completedOrdersResult.rows[0].count),
+            pedidos_pendientes: Number(pendingOrdersResult.rows[0].count),
+            productos_activos: Number(activeProductsResult.rows[0].count)
+        });
+
+    } catch (error) {
+        console.error('Error en getDashboardStats:', error);
+        res.status(500).json({ message: 'Error al calcular estadísticas.' });
+    }
+};
+
+/**
+ * 8. Obtener Estadísticas Avanzadas (RF-V-Dashboard-Adv)
+ * Endpoint: GET /api/seller/stats/advanced
+ * Query Params: ?period=day|week|month (Default: week)
+ */
+exports.getAdvancedStats = async (req, res) => {
+    try {
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+        if (!vendorProfile) {
+            return res.status(404).json({ message: 'Vendedor no encontrado.' });
+        }
+        const idVendedor = vendorProfile.ID_Vendedor;
+        const period = req.query.period || 'week'; // day, week, month
+
+        // Definir filtro de fecha
+        let dateFilter = '';
+        if (period === 'day') {
+            dateFilter = `AND p."Fecha_Creacion" >= NOW() - INTERVAL '1 day'`;
+        } else if (period === 'week') {
+            dateFilter = `AND p."Fecha_Creacion" >= NOW() - INTERVAL '1 week'`;
+        } else if (period === 'month') {
+            dateFilter = `AND p."Fecha_Creacion" >= NOW() - INTERVAL '1 month'`;
+        }
+
+        const [topProducts, bestDay, salesTrend, salesByCategory, kpis] = await Promise.all([
+            // 1. Productos más vendidos (Top 5)
+            pool.query(`
+                SELECT prod."Nombre", prod."Imagen_URL", SUM(dp."Cantidad") as "Total_Vendido"
+                FROM detalle_pedido dp
+                JOIN pedido p ON dp."ID_Pedido" = p."ID_Pedido"
+                JOIN producto prod ON dp."ID_Producto" = prod."ID_Producto"
+                WHERE p."ID_Vendedor" = $1 AND p."Estado_Pedido" = 'Entregado' ${dateFilter}
+                GROUP BY prod."ID_Producto", prod."Nombre", prod."Imagen_URL"
+                ORDER BY "Total_Vendido" DESC
+                LIMIT 5
+            `, [idVendedor]),
+
+            // 2. Día con más ventas (Solo si el periodo es semana o mes)
+            pool.query(`
+                SELECT TO_CHAR(p."Fecha_Creacion", 'FMDay') as "Dia", COUNT(*) as "Total_Pedidos"
+                FROM pedido p
+                WHERE p."ID_Vendedor" = $1 AND p."Estado_Pedido" != 'Cancelado' ${dateFilter}
+                GROUP BY "Dia"
+                ORDER BY "Total_Pedidos" DESC
+                LIMIT 1
+            `, [idVendedor]),
+
+            // 3. Tendencia de Ventas (Agrupado por día)
+            pool.query(`
+                SELECT TO_CHAR(p."Fecha_Creacion", 'YYYY-MM-DD') as "Fecha", SUM(p."Precio_Total") as "Total_Venta"
+                FROM pedido p
+                WHERE p."ID_Vendedor" = $1 AND p."Estado_Pedido" = 'Entregado' ${dateFilter}
+                GROUP BY "Fecha"
+                ORDER BY "Fecha" ASC
+            `, [idVendedor]),
+
+            // 4. Ventas por Categoría
+            pool.query(`
+                SELECT c."Nombre" as "Categoria", SUM(dp."Cantidad") as "Total_Vendido"
+                FROM detalle_pedido dp
+                JOIN pedido p ON dp."ID_Pedido" = p."ID_Pedido"
+                JOIN producto prod ON dp."ID_Producto" = prod."ID_Producto"
+                JOIN categoria c ON prod."ID_Categoria" = c."ID_Categoria"
+                WHERE p."ID_Vendedor" = $1 AND p."Estado_Pedido" = 'Entregado' ${dateFilter}
+                GROUP BY c."Nombre"
+                ORDER BY "Total_Vendido" DESC
+            `, [idVendedor]),
+
+            // 5. KPIs (Ticket Promedio, Crecimiento - Crecimiento simulado por ahora)
+            pool.query(`
+                SELECT 
+                    COALESCE(SUM("Precio_Total"), 0) as "Ingresos",
+                    COUNT(*) as "Pedidos",
+                    CASE WHEN COUNT(*) > 0 THEN COALESCE(SUM("Precio_Total"), 0) / COUNT(*) ELSE 0 END as "Ticket_Promedio"
+                FROM pedido p
+                WHERE p."ID_Vendedor" = $1 AND p."Estado_Pedido" = 'Entregado' ${dateFilter}
+            `, [idVendedor])
+        ]);
+
+        // Producto más solicitado (El primero de topProducts)
+        const mostRequested = topProducts.rows.length > 0 ? topProducts.rows[0] : null;
+
+        res.status(200).json({
+            topProducts: topProducts.rows,
+            mostRequested: mostRequested,
+            bestDay: bestDay.rows.length > 0 ? bestDay.rows[0] : null,
+            salesTrend: salesTrend.rows,
+            salesByCategory: salesByCategory.rows,
+            kpis: kpis.rows[0]
+        });
+
+    } catch (error) {
+        console.error('Error en getAdvancedStats:', error);
+        res.status(500).json({ message: 'Error al obtener estadísticas avanzadas.' });
+    }
+};

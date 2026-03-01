@@ -1,0 +1,18 @@
+# Node.js
+node_modules/
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test scripts
+test-db.js
+test-register.js
+deploy-schema.js
+register_log.txt
+uploads/*.jpg

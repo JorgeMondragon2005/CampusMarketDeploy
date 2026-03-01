@@ -1,0 +1,104 @@
+<!-- BOTÓN DE REGRESO -->
+<div class="back-nav">
+  <a routerLink="/home" class="btn-back">
+    ← Volver al Catálogo
+  </a>
+</div>
+
+<div class="detail-container" *ngIf="!loading && product; else loader">
+
+  <!-- COLUMNA IZQUIERDA: IMAGEN -->
+  <div class="product-image">
+    <img [src]="getImageUrl(product)" class="main-img" alt="{{ product.Nombre }}"
+      onerror="this.src='https://placehold.co/600x600?text=Sin+Foto'">
+  </div>
+
+
+  <!-- COLUMNA DERECHA: INFORMACIÓN -->
+  <div class="product-info">
+    <span class="category-tag">{{ product.Categoria_Nombre || 'General' }}</span>
+
+    <h1 style="display: flex; align-items: center; justify-content: space-between;">
+      {{ product.Nombre }}
+      <button class="favorite-btn" (click)="toggleFavorite()" [style.color]="isFavorite ? '#ef4444' : '#64748b'"
+        [style.transform]="isFavorite ? 'scale(1.1)' : 'scale(1)'">
+        {{ isFavorite ? '❤️' : '🤍' }}
+      </button>
+    </h1>
+
+    <!-- CALIFICACIÓN PROMEDIO -->
+    <div class="rating-display">
+      <span class="stars-avg">⭐ {{ (averageRating | number:'1.1-1') || '0.0' }}</span>
+      <span class="votes-count">({{ totalVotes }} votos)</span>
+    </div>
+
+    <!-- SECCIÓN VENDEDOR (RESTORED & FIXED) -->
+    <div class="seller-info">
+      <span class="icon">🏪</span>
+      <span>Vendido por:
+        <a [routerLink]="['/home']" [queryParams]="{sellerId: product.ID_Vendedor}" class="seller-link">
+          <strong>{{ product.Nombre_Tienda || 'Vendedor UTM' }}</strong>
+        </a>
+      </span>
+    </div>
+
+    <p class="price">${{ product.Precio }}</p>
+
+    <div class="description">
+      <h3>Descripción</h3>
+      <p>{{ product.Descripcion }}</p>
+    </div>
+
+    <!-- LUGARES DE ENCUENTRO -->
+    <div class="meeting-places" *ngIf="locations.length > 0">
+      <h3>📍 Lugares de Encuentro</h3>
+      <ul>
+        <li *ngFor="let loc of locations">
+          <strong>{{ loc.Nombre }}</strong> <span *ngIf="loc.Descripcion">- {{ loc.Descripcion }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- INDICADOR DE STOCK -->
+    <div class="stock-badge" [class.out]="currentStock == 0" style="margin-top: 20px;">
+      {{ currentStock > 0 ? '🟢 Disponible: ' + currentStock + ' unidades' : '🔴 Agotado' }}
+    </div>
+
+    <!-- BOTONES DE ACCIÓN -->
+    <div class="actions" style="margin-top: 20px;">
+      <button class="btn-add" (click)="addToCart()" [disabled]="currentStock == 0">
+        🛍️ Agregar a mi Pedido
+      </button>
+    </div>
+
+    <!-- SECCIÓN PARA CALIFICAR (ELIMINADA: Se califica desde Mis Pedidos) -->
+
+    <!-- COMENTARIOS DE OTROS USUARIOS -->
+    <div class="reviews-section">
+      <h3>💬 Reseñas de otros compradores</h3>
+
+      <div *ngIf="reviews.length === 0" class="no-reviews">
+        Aún no hay comentarios para este producto.
+      </div>
+
+      <div *ngFor="let r of reviews" class="review-card">
+        <div class="review-header">
+          <strong class="review-author">{{ r.Nombre }} {{ r.Apellido_Paterno }}</strong>
+          <span style="color: #f59e0b; font-size: 0.9rem;">{{ '★'.repeat(r.Puntuacion) }}{{ '☆'.repeat(5 - r.Puntuacion)
+            }}</span>
+        </div>
+        <div class="review-date">{{ r.Fecha | date:'mediumDate' }}</div>
+        <p class="review-text">{{ r.Comentario }}</p>
+      </div>
+    </div>
+
+  </div> <!-- Cierre de product-info -->
+
+</div> <!-- Cierre de detail-container -->
+
+<!-- LOADER MIENTRAS CARGA -->
+<ng-template #loader>
+  <div style="text-align: center; padding: 100px; font-size: 1.5rem; color: #94a3b8;">
+    Cargando producto... 🍔
+  </div>
+</ng-template>

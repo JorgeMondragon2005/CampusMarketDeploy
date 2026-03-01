@@ -1,0 +1,143 @@
+<nav class="top-navbar">
+  <div class="nav-logo">
+    <span>MERCADITO</span> <span class="utm-green">UTM</span> 🦎
+  </div>
+
+  <div class="nav-actions">
+    <button class="btn-secondary theme-toggle" (click)="toggleTheme()" style="margin-right: 10px;">
+      {{ currentTheme === 'dark' ? '☀️' : '🌙' }}
+    </button>
+
+    <div class="notification-btn-container" style="position: relative; margin-right: 10px;">
+      <button class="btn-secondary" [routerLink]="['/notifications']">
+        🔔
+        <span *ngIf="unreadCount > 0" class="badge-count"
+          style="position: absolute; top: -5px; right: -5px; background: red; color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; font-weight: bold;">
+          {{ unreadCount }}
+        </span>
+      </button>
+    </div>
+
+    <div class="cart-btn-container">
+      <button class="btn-secondary" (click)="goToCart()">
+        🛒 <span class="cart-count">{{ cartCount }}</span>
+      </button>
+    </div>
+
+    <div class="user-menu">
+      <button class="btn-secondary">
+        👤 Mi Cuenta ▾
+      </button>
+      <div class="dropdown-content">
+        <a (click)="goToProfile()">⚙️ Configuración</a>
+        <a [routerLink]="['/my-orders']">📦 Mis Pedidos</a>
+        <a [routerLink]="['/favorites']">❤️ Mis Favoritos</a>
+        <a [routerLink]="['/notifications']">🔔 Notificaciones</a>
+        <hr>
+        <a (click)="logout()" class="logout-text">🚪 Cerrar Sesión</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<div class="marketplace-container">
+
+  <!-- BANNER PRINCIPAL -->
+  <section class="hero-banner">
+    <div class="hero-content">
+      <h1>MERCADITO <span class="stroke-text">UTM</span></h1>
+      <p>Todo lo que necesitas para el cuatri, en un solo lugar.</p>
+    </div>
+    <div class="hero-decoration">🦎</div>
+  </section>
+
+  <div class="main-layout">
+
+    <!-- BARRA LATERAL (FILTROS) -->
+    <aside class="sidebar-filters">
+      <h3>Categorías</h3>
+      <ul class="category-list">
+        <li *ngFor="let cat of categories" (click)="selectCategory(cat)"
+          [class.active]="selectedCategory === cat.Nombre">
+          <span class="icon">{{ getCategoryIcon(cat.Nombre) }}</span>
+          {{ cat.Nombre }}
+          <span class="arrow">›</span>
+        </li>
+      </ul>
+    </aside>
+
+    <!-- ÁREA PRINCIPAL DE PRODUCTOS -->
+    <main class="products-area">
+
+      <!-- BUSCADOR -->
+      <div class="top-bar">
+        <div class="search-pill">
+          <i class="fa-solid fa-search">🔍</i>
+          <input type="text" [(ngModel)]="searchTerm" (input)="filterProducts()" placeholder="Buscar productos...">
+        </div>
+      </div>
+
+      <!-- SELLER BANNER -->
+      <div *ngIf="sellerName" class="seller-banner">
+        <span>🏪 Estás viendo productos de: <strong>{{ sellerName }}</strong></span>
+        <button class="btn-text-primary" (click)="clearSellerFilter()">Ver todos</button>
+      </div>
+
+      <!-- FILTROS HORIZONTALES (Móvil) -->
+      <div class="mobile-filters">
+        <div class="chip-list">
+          <button *ngFor="let cat of categories" class="chip" [class.active]="selectedCategory === cat.Nombre"
+            (click)="selectCategory(cat)">
+            {{ getCategoryIcon(cat.Nombre) }} {{ cat.Nombre }}
+          </button>
+        </div>
+      </div>
+
+      <!-- GRID DE PRODUCTOS -->
+      <div class="products-grid">
+        <div *ngFor="let item of filteredProducts" class="stuffus-card" [class.out-of-stock]="isOutOfStock(item)">
+
+          <div class="card-image-bg">
+            <span class="badge-vivid" *ngIf="!isOutOfStock(item)">NUEVO</span>
+            <span class="badge-sold-out" *ngIf="isOutOfStock(item)">AGOTADO</span>
+
+            <!-- IMAGEN SEGURA -->
+            <img [src]="getImageUrl(item)" alt="{{ item.Nombre }}" style="cursor: pointer;"
+              (click)="viewProduct(item.ID_Producto || item.id)" onerror="this.src='assets/placeholder.svg'">
+
+          </div>
+
+          <div class="card-info">
+            <div class="info-top">
+              <span class="category-tag">{{ item.Categoria_Nombre || 'General' }}</span>
+              <h3 class="title">{{ item.Nombre || item.name }}</h3>
+              <div class="rating">⭐ {{ (item.Promedio_Calificacion || 0) | number:'1.1-1' }}</div>
+            </div>
+
+            <div class="info-bottom">
+              <span class="price">${{ item.Precio || item.price }}</span>
+
+              <div class="action-buttons">
+                <!-- BOTÓN VER -->
+                <button class="btn-secondary" (click)="viewProduct(item.ID_Producto || item.id)">Ver</button>
+
+                <!-- BOTÓN COMPRAR (CARRITO) -->
+                <button class="btn-primary" (click)="addToCart(item)" [disabled]="isOutOfStock(item)">
+                  {{ isOutOfStock(item) ? 'Agotado' : 'Comprar' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- MENSAJE SI NO HAY RESULTADOS -->
+      <div *ngIf="filteredProducts.length === 0" class="no-results">
+        <p>😔 No encontramos productos con esa búsqueda...</p>
+      </div>
+
+    </main>
+
+  </div>
+</div>

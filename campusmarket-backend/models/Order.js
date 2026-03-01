@@ -1,0 +1,447 @@
+const { pool } = require('../config/database');
+const crypto = require('crypto');
+const Notification = require('./Notification');
+
+/**
+ * Modelo para gestionar el CRUD de Pedidos (RF-C-004, RF-V-007, RF-V-008)
+ */
+class Order {
+
+    /**
+     * Crea un nuevo pedido (RF-C-004).
+     * Esta función es una TRANSACCIÓN. Si algo falla (ej. stock),
+     * se hace rollback automáticamente.
+     */
+    static async create(orderData) {
+        const {
+            ID_Comprador,
+            ID_Vendedor,
+            ID_Ubicacion_Entrega,
+            Hora_Encuentro,
+            Precio_Total,
+            items, // Array de productos
+            Metodo_Pago,
+            PayPal_Transaction_ID,
+            QR_Token
+        } = orderData;
+
+        const client = await pool.connect();
+
+        try {
+            await client.query('BEGIN');
+
+            // 1. Crear el Pedido principal
+            // Sistema de Código Amigable (PED-XXXXXX)
+            let finalQRToken = QR_Token;
+            if (Metodo_Pago === 'PayPal') {
+                // Generar un código alfanumérico corto y único para el usuario
+                const shortId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                finalQRToken = `PED-${shortId}`;
+            } else if (!finalQRToken) {
+                finalQRToken = crypto.randomBytes(8).toString('hex');
+            }
+
+            let initialStatus = Metodo_Pago === 'PayPal' ? 'Autorizado' : 'Pendiente';
+
+            const pedidoQuery = `
+                INSERT INTO pedido ("ID_Comprador", "ID_Vendedor", "Estado_Pedido", "Precio_Total", "Metodo_Pago", "PayPal_Transaction_ID", "QR_Token", "Fecha_Actualizacion")
+                VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+                RETURNING "ID_Pedido"
+            `;
+            const { rows: pedidoRows } = await client.query(pedidoQuery, [
+                ID_Comprador,
+                ID_Vendedor,
+                initialStatus,
+                Precio_Total,
+                Metodo_Pago || 'Efectivo',
+                PayPal_Transaction_ID || null,
+                finalQRToken
+            ]);
+            const newOrder = pedidoRows[0];
+            const newPedidoId = newOrder.ID_Pedido;
+
+            // 2. Insertar los detalles del pedido y actualizar stock
+            for (const item of items) {
+                const detalleQuery = `
+                    INSERT INTO detalle_pedido ("ID_Pedido", "ID_Producto", "Cantidad", "Precio_Unitario")
+                    VALUES ($1, $2, $3, $4)
+                `;
+                await client.query(detalleQuery, [
+                    newPedidoId,
+                    item.ID_Producto,
+                    item.Cantidad,
+                    item.Precio_Unitario
+                ]);
+
+                // Stock is already subtracted when added to cart
+            }
+
+            // 3. Insertar en la tabla 'encuentro' (RF-C-004)
+            // Nota: En Postgres no existe tabla ubicacion_entrega_pedido, sino encuentro según el schema original (migrate_002.js)
+            // pero el create table de Ubicacion.js (hasActiveOrders) referencia 'ubicacion_entrega_pedido'.
+            // Revisando 'database.sql' (reconstruido), la tabla es 'encuentro'.
+            const encuentroQuery = `
+                INSERT INTO encuentro ("ID_Pedido", "ID_Ubicacion", "Hora_Encuentro")
+                VALUES ($1, $2, $3)
+            `;
+            await client.query(encuentroQuery, [newPedidoId, ID_Ubicacion_Entrega, Hora_Encuentro]);
+
+            await client.query('COMMIT');
+            return newPedidoId;
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error en Order.create:', error);
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Obtiene los pedidos de un vendedor (RF-V-007).
+     */
+    /**
+     * Obtiene los pedidos de un vendedor (RF-V-007).
+     */
+    static async findByVendor(idVendedor) {
+        const query = `
+            SELECT 
+                p."ID_Pedido", 
+                p."Fecha_Creacion", 
+                p."Fecha_Actualizacion",
+                p."Estado_Pedido", 
+                p."Precio_Total",
+                p."Metodo_Pago",
+                p."PayPal_Transaction_ID",
+                p."Confirmacion_Vendedor",
+                p."Confirmacion_Comprador",
+                u."Nombre" AS "Nombre_Comprador",
+                u."Email" AS "Email_Comprador",
+                u."Imagen_URL" AS "Foto_Comprador"
+            FROM pedido p
+            JOIN usuario u ON p."ID_Comprador" = u."ID_Usuario"
+            WHERE p."ID_Vendedor" = $1
+            ORDER BY p."Fecha_Actualizacion" DESC
+        `;
+        try {
+            const { rows } = await pool.query(query, [idVendedor]);
+            return rows;
+        } catch (error) {
+            console.error('Error en Order.findByVendor:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Obtiene los pedidos de un comprador (RF-C-005).
+     */
+    static async findByBuyer(idComprador) {
+        const query = `
+            SELECT 
+                p."ID_Pedido", 
+                p."Fecha_Creacion", 
+                p."Fecha_Actualizacion",
+                p."Estado_Pedido", 
+                p."Precio_Total",
+                p."Metodo_Pago",
+                p."PayPal_Transaction_ID",
+                p."Confirmacion_Vendedor",
+                p."Confirmacion_Comprador",
+                v."Nombre_Tienda" AS "Nombre_Vendedor"
+            FROM pedido p
+            JOIN vendedor v ON p."ID_Vendedor" = v."ID_Vendedor"
+            WHERE p."ID_Comprador" = $1
+            ORDER BY p."Fecha_Actualizacion" DESC
+        `;
+        try {
+            const { rows } = await pool.query(query, [idComprador]);
+            return rows;
+        } catch (error) {
+            console.error('Error en Order.findByBuyer:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Busca los detalles de un pedido (productos).
+     * @param {number} idPedido - ID_Pedido.
+     * @returns {Array} Lista de productos en el pedido.
+     */
+    static async findDetails(idPedido) {
+        const query = `
+            SELECT
+                dp."ID_Producto",
+                dp."Cantidad",
+                dp."Precio_Unitario",
+                prod."Nombre" AS "Nombre_Producto",
+                prod."Imagen_URL",
+                prod."Stock" AS "Stock_Actual"
+            FROM detalle_pedido dp
+            JOIN producto prod ON dp."ID_Producto" = prod."ID_Producto"
+            WHERE dp."ID_Pedido" = $1
+        `;
+        try {
+            const { rows } = await pool.query(query, [idPedido]);
+            return rows;
+        } catch (error) {
+            console.error('Error en Order.findDetails:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Actualiza el estado de un pedido (RF-V-008).
+     * Es una transacción para actualizar 'pedido' y registrar en 'historial_pedido'.
+     * @param {number} idPedido - ID_Pedido.
+     * @param {string} newStatus - Nuevo estado (ej. 'En preparacion').
+     * @param {string} actor - Quién realiza el cambio (ej. 'Vendedor' o 'Comprador').
+     * @returns {boolean} Éxito.
+     */
+    static async updateStatus(idPedido, newStatus, actor) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Obtener el estado actual y método de pago
+            const { rows: current } = await client.query(
+                'SELECT "Estado_Pedido", "Metodo_Pago", "Confirmacion_Vendedor", "Confirmacion_Comprador", "ID_Vendedor", "ID_Comprador" FROM pedido WHERE "ID_Pedido" = $1',
+                [idPedido]
+            );
+            const orderInfo = current[0];
+            const oldStatus = orderInfo.Estado_Pedido;
+
+            let finalStatus = newStatus;
+            let confVendedor = orderInfo.Confirmacion_Vendedor;
+            let confComprador = orderInfo.Confirmacion_Comprador;
+
+            // 2. Lógica de Confirmación Especial para Efectivo
+            if (orderInfo.Metodo_Pago === 'Efectivo' && newStatus === 'Entregado') {
+                if (actor.includes('Vendedor')) {
+                    confVendedor = true;
+                } else if (actor.includes('Comprador')) {
+                    confComprador = true;
+                }
+
+                // Solo se marca como "Entregado" si ambos han confirmado
+                if (!confVendedor || !confComprador) {
+                    finalStatus = oldStatus; // No cambiamos el estado principal aún
+                }
+            } else if (newStatus === 'Entregado' && orderInfo.Metodo_Pago !== 'Efectivo') {
+                // Para otros métodos (PayPal), confirmación simple
+                confVendedor = true;
+                confComprador = true;
+            }
+
+            if (oldStatus === finalStatus &&
+                confVendedor === orderInfo.Confirmacion_Vendedor &&
+                confComprador === orderInfo.Confirmacion_Comprador) {
+                // No hay cambios profundos, pero actualizamos Fecha_Actualizacion
+                const updateTimeQuery = `UPDATE pedido SET "Fecha_Actualizacion" = CURRENT_TIMESTAMP WHERE "ID_Pedido" = $1`;
+                await client.query(updateTimeQuery, [idPedido]);
+                await client.query('COMMIT');
+                return true;
+            }
+
+            // 3. Actualizar el pedido
+            const updateQuery = `
+                UPDATE pedido 
+                SET "Estado_Pedido" = $1, 
+                    "Confirmacion_Vendedor" = $2, 
+                    "Confirmacion_Comprador" = $3,
+                    "Fecha_Actualizacion" = CURRENT_TIMESTAMP
+                WHERE "ID_Pedido" = $4
+            `;
+            await client.query(updateQuery, [finalStatus, confVendedor, confComprador, idPedido]);
+
+            // 4. Notificaciones de Confirmación
+            if (orderInfo.Metodo_Pago === 'Efectivo') {
+                if (actor === 'Vendedor' && confVendedor && !orderInfo.Confirmacion_Vendedor) {
+                    await Notification.create({
+                        ID_Usuario: orderInfo.ID_Comprador,
+                        Tipo: 'PEDIDO_ENTREGADO',
+                        Mensaje: 'El vendedor ha confirmado el paquete. Por favor, confirma si recibiste el pedido.',
+                        ID_Referencia: idPedido
+                    });
+                } else if (actor === 'Comprador' && confComprador && !orderInfo.Confirmacion_Comprador) {
+                    const { rows: vRows } = await client.query('SELECT "ID_Usuario" FROM vendedor WHERE "ID_Vendedor" = $1', [orderInfo.ID_Vendedor]);
+                    if (vRows.length > 0) {
+                        await Notification.create({
+                            ID_Usuario: vRows[0].ID_Usuario,
+                            Tipo: 'RECIBO_CONFIRMADO',
+                            Mensaje: 'El comprador ha confirmado que recibió el pedido en efectivo.',
+                            ID_Referencia: idPedido
+                        });
+                    }
+                }
+            }
+
+            // 5. Registrar el cambio en el historial si el estado cambió
+            if (oldStatus !== finalStatus) {
+                const historyQuery = `
+                    INSERT INTO historial_pedido ("ID_Pedido", "Estado_Anterior", "Estado_Nuevo", "Actor")
+                    VALUES ($1, $2, $3, $4)
+                `;
+                await client.query(historyQuery, [idPedido, oldStatus, finalStatus, actor]);
+
+                // Restaurar stock si se cancela
+                if (finalStatus === 'Cancelado' && oldStatus !== 'Cancelado') {
+                    const details = await Order.findDetails(idPedido);
+                    for (const item of details) {
+                        await client.query(
+                            'UPDATE producto SET "Stock" = "Stock" + $1 WHERE "ID_Producto" = $2',
+                            [item.Cantidad, item.ID_Producto]
+                        );
+                    }
+                }
+            }
+
+            await client.query('COMMIT');
+            return { success: true, finalStatus, oldStatus };
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error en Order.updateStatus:', error);
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Busca un pedido por ID (para verificar propiedad).
+     * @param {number} idPedido - ID_Pedido.
+     * @returns {object|null} El pedido.
+     */
+    static async findById(idPedido) {
+        const query = `SELECT * FROM pedido WHERE "ID_Pedido" = $1`;
+        try {
+            const { rows } = await pool.query(query, [idPedido]);
+            return rows[0] || null;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    /**
+     * Busca un pedido por ID con informacion detallada del comprador y entrega.
+     * (Para mostrar en el detalle del pedido).
+     */
+    static async findByIdWithInfo(idPedido) {
+        const query = `
+            SELECT 
+                p.*,
+                u."Nombre" AS "Nombre_Comprador",
+                u."Apellido_Paterno" AS "Apellido_Comprador",
+                u."Email" AS "Email_Comprador",
+                u."Telefono" AS "Telefono_Comprador",
+                u."Imagen_URL" AS "Foto_Comprador",
+                e."Hora_Encuentro",
+                ub."Nombre_Ubicacion",
+                -- Seller Info
+                v."Nombre_Tienda",
+                v."PayPal_Email" AS "PayPal_Email_Vendedor",
+                v."Nombre_Banco" AS "Nombre_Banco_Vendedor",
+                v."Nombre_Cuenta" AS "Nombre_Cuenta_Vendedor",
+                v."Numero_Tarjeta" AS "Numero_Tarjeta_Vendedor",
+                uv."ID_Usuario" AS "ID_Vendedor_User",
+                uv."Nombre" AS "Nombre_Vendedor",
+                uv."Apellido_Paterno" AS "Apellido_Vendedor",
+                uv."Telefono" AS "Telefono_Vendedor",
+                uv."Imagen_URL" AS "Foto_Vendedor"
+            FROM pedido p
+            LEFT JOIN usuario u ON p."ID_Comprador" = u."ID_Usuario"
+            LEFT JOIN encuentro e ON p."ID_Pedido" = e."ID_Pedido"
+            LEFT JOIN ubicacion_entrega ub ON e."ID_Ubicacion" = ub."ID_Ubicacion"
+            LEFT JOIN vendedor v ON p."ID_Vendedor" = v."ID_Vendedor"
+            LEFT JOIN usuario uv ON v."ID_Usuario" = uv."ID_Usuario"
+            WHERE p."ID_Pedido" = $1
+        `;
+        try {
+            const { rows } = await pool.query(query, [idPedido]);
+            return rows[0] || null;
+        } catch (error) {
+            console.error('Error en Order.findByIdWithInfo:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Agrega una reseña al pedido (y potencialmente a los productos).
+     * (RF-C-007)
+     */
+    static async addReview(idPedido, rating, comment) {
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            // 1. Obtener productos del pedido
+            const detalles = await Order.findDetails(idPedido);
+            const orderData = await Order.findById(idPedido);
+            const idComprador = orderData.ID_Comprador;
+
+            // 2. Insertar reseña para cada producto (calificacion_producto)
+            // Segun supabase_schema.sql la tabla es 'calificacion_producto'
+            for (const item of detalles) {
+                // Verificar si ya existe para evitar error de llave duplicada
+                // Usamos ON CONFLICT DO UPDATE o ignoramos fallo si ya calificó
+                const reviewQuery = `
+                    INSERT INTO calificacion_producto ("ID_Producto", "ID_Usuario", "Puntuacion", "Comentario", "Fecha")
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT ("ID_Producto", "ID_Usuario") DO UPDATE 
+                    SET "Puntuacion" = $3, "Comentario" = $4, "Fecha" = NOW()
+                `;
+                await client.query(reviewQuery, [item.ID_Producto, idComprador, rating, comment]);
+            }
+
+            await client.query('COMMIT');
+            return true;
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+    }
+
+    /**
+     * Actualiza el comprobante de pago de un pedido.
+     */
+    static async updateVoucher(orderId, voucherUrl) {
+        const query = `
+            UPDATE pedido
+            SET "Comprobante_Pago_URL" = $1,
+                "Estado_Pedido" = 'Pagado',
+                "Fecha_Actualizacion" = CURRENT_TIMESTAMP
+            WHERE "ID_Pedido" = $2
+        `;
+        try {
+            const result = await pool.query(query, [voucherUrl, orderId]);
+            return result.rowCount > 0;
+        } catch (error) {
+            console.error('Error updating voucher: ', error);
+            throw error;
+        }
+    }
+
+    // Validar QR (Nuevo método para Seller Dashboard)
+    static async validateQR(orderId, tokenScan) {
+        const query = `
+            UPDATE pedido
+            SET "Estado_Pedido" = 'Entregado'
+            WHERE "ID_Pedido" = $1 
+              AND "QR_Token" = $2 
+              AND ("Estado_Pedido" = 'Pagado' OR "Estado_Pedido" = 'Listo' OR "Estado_Pedido" = 'En camino')
+              AND "Estado_Pedido" != 'Entregado'
+        `;
+        try {
+            const result = await pool.query(query, [orderId, tokenScan]);
+            return result.rowCount > 0;
+        } catch (error) {
+            console.error('Error validating QR: ', error);
+            throw error;
+        }
+    }
+}
+
+module.exports = Order;
