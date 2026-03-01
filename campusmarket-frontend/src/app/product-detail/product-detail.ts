@@ -24,7 +24,7 @@ export class ProductDetail implements OnInit {
   reviews: any[] = [];
   isFavorite: boolean = false;
   comment: string = '';
-  apiUrl: string = 'http://localhost:3000';
+  apiUrl: string = 'https://campusmarketdeploy.onrender.com';
 
 
   // Calificaciones
@@ -92,7 +92,7 @@ export class ProductDetail implements OnInit {
   }
 
   loadReviews(productId: number) {
-    this.http.get(`http://localhost:3000/api/products/${productId}/reviews`).subscribe({
+    this.http.get(`https://campusmarketdeploy.onrender.com/api/products/${productId}/reviews`).subscribe({
       next: (data: any) => this.reviews = data
     });
   }

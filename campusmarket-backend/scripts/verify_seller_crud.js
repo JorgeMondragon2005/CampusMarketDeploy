@@ -12,7 +12,7 @@ async function verifySellerCRUD() {
         // 1. REGISTRO DE VENDEDOR
         console.log(`\n1️⃣ Registrando nuevo vendedor: ${email}`);
         try {
-            await axios.post('http://localhost:3000/api/auth/register', {
+            await axios.post('https://campusmarketdeploy.onrender.com/api/auth/register', {
                 Nombre: 'Test',
                 Apellido_Paterno: 'Vendor',
                 Apellido_Materno: 'CRUD',
@@ -29,7 +29,7 @@ async function verifySellerCRUD() {
 
         // 2. LOGIN
         console.log('\n2️⃣ Iniciando sesión...');
-        const loginRes = await axios.post('http://localhost:3000/api/auth/login', {
+        const loginRes = await axios.post('https://campusmarketdeploy.onrender.com/api/auth/login', {
             Email: email,
             Contrasena: password
         });
@@ -42,7 +42,7 @@ async function verifySellerCRUD() {
 
         // 3. VERIFICAR LISTADO VACÍO
         console.log('\n3️⃣ Verificando listado inicial (debe estar vacío)...');
-        const listRes1 = await axios.get('http://localhost:3000/api/seller/my-products', config);
+        const listRes1 = await axios.get('https://campusmarketdeploy.onrender.com/api/seller/my-products', config);
         if (Array.isArray(listRes1.data) && listRes1.data.length === 0) {
             console.log('✅ Listado inicial correcto (0 productos).');
         } else {
@@ -66,7 +66,7 @@ async function verifySellerCRUD() {
         form.append('image', fs.createReadStream('test_image.jpg'));
 
         try {
-            const createRes = await axios.post('http://localhost:3000/api/products', form, {
+            const createRes = await axios.post('https://campusmarketdeploy.onrender.com/api/products', form, {
                 headers: {
                     ...config.headers,
                     ...form.getHeaders()
@@ -76,7 +76,7 @@ async function verifySellerCRUD() {
             
             // 5. VERIFICAR LISTADO CON PRODUCTO
             console.log('\n5️⃣ Verificando listado actualizado...');
-            const listRes2 = await axios.get('http://localhost:3000/api/seller/my-products', config);
+            const listRes2 = await axios.get('https://campusmarketdeploy.onrender.com/api/seller/my-products', config);
             const products = listRes2.data;
             
             if (Array.isArray(products) && products.length > 0) {

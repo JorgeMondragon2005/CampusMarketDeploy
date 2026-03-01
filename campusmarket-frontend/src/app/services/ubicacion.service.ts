@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class UbicacionService {
-  private apiUrl = 'http://localhost:3000/api/locations';
+  private apiUrl = 'https://campusmarketdeploy.onrender.com/api/locations';
 
   constructor(private http: HttpClient) { }
 

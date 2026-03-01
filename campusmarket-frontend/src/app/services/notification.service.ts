@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
     providedIn: 'root'
 })
 export class NotificationService {
-    private apiUrl = 'http://localhost:3000/api/notifications';
+    private apiUrl = 'https://campusmarketdeploy.onrender.com/api/notifications';
 
     constructor(private http: HttpClient) { }
 

@@ -8,7 +8,7 @@ import { Router } from '@angular/router';
   providedIn: 'root'
 })
 export class CartService {
-  private apiUrl = 'http://localhost:3000/api/cart';
+  private apiUrl = 'https://campusmarketdeploy.onrender.com/api/cart';
   private cartItems = new BehaviorSubject<any[]>([]);
   public currentCart = this.cartItems.asObservable();
 

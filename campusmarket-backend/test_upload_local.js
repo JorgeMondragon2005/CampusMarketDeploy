@@ -18,7 +18,7 @@ async function runTest() {
         let token;
 
         try {
-            const regRes = await axios.post('http://localhost:3000/api/auth/register', {
+            const regRes = await axios.post('https://campusmarketdeploy.onrender.com/api/auth/register', {
                 Nombre: 'Test',
                 Apellido_Paterno: 'User',
                 Email: email,
@@ -29,7 +29,7 @@ async function runTest() {
             token = regRes.data.user ? regRes.data.user.token : regRes.data.token; // Ajustar según respuesta
             if (!token) {
                 // Si register no devuelve token directo, hacemos login
-                const loginRes = await axios.post('http://localhost:3000/api/auth/login', {
+                const loginRes = await axios.post('https://campusmarketdeploy.onrender.com/api/auth/login', {
                     Email: email,
                     Contrasena: password
                 });
@@ -63,7 +63,7 @@ async function runTest() {
             }
         };
 
-        const res = await axios.put('http://localhost:3000/api/auth/profile', form, config);
+        const res = await axios.put('https://campusmarketdeploy.onrender.com/api/auth/profile', form, config);
 
         console.log('✅ ÉXITO. Respuesta del Servidor:');
         console.log(JSON.stringify(res.data, null, 2));

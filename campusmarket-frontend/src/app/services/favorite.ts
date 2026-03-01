@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
     providedIn: 'root'
 })
 export class FavoriteService {
-    private apiUrl = 'http://localhost:3000/api/products';
+    private apiUrl = 'https://campusmarketdeploy.onrender.com/api/products';
 
     constructor(private http: HttpClient) { }
 

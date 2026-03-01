@@ -49,7 +49,7 @@ export class EditProductComponent implements OnInit {
         category: product.ID_Categoria
       });
       if (product.Imagen_URL) {
-        this.imagePreview = `http://localhost:3000/uploads/${product.Imagen_URL}`;
+        this.imagePreview = `https://campusmarketdeploy.onrender.com/uploads/${product.Imagen_URL}`;
       }
     });
   }

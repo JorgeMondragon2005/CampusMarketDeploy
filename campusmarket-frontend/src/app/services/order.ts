@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
   providedIn: 'root'
 })
 export class OrderService {
-  private apiUrl = 'http://localhost:3000/api/orders';
+  private apiUrl = 'https://campusmarketdeploy.onrender.com/api/orders';
 
   constructor(private http: HttpClient) { }
 
@@ -30,7 +30,7 @@ export class OrderService {
   }
 
   createPreference(items: any[]): Observable<any> {
-    return this.http.post('http://localhost:3000/api/payment/create_preference', { items }, { headers: this.getHeaders() });
+    return this.http.post('https://campusmarketdeploy.onrender.com/api/payment/create_preference', { items }, { headers: this.getHeaders() });
   }
 
   validateQR(orderId: number, qrToken: string): Observable<any> {

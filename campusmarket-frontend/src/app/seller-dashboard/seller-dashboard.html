@@ -204,7 +204,7 @@
 
             <!-- Usamos fotoFinal que calculamos en el TS -->
             <img
-              [src]="product.fotoFinal ? 'http://localhost:3000/uploads/' + product.fotoFinal : 'assets/placeholder.svg'"
+              [src]="product.fotoFinal ? 'https://campusmarketdeploy.onrender.com/uploads/' + product.fotoFinal : 'assets/placeholder.svg'"
               alt="{{ product.Nombre || product.name }}"
               style="width: 100%; height: 100%; object-fit: cover; display: block;"
               onerror="this.src='assets/placeholder.svg'">

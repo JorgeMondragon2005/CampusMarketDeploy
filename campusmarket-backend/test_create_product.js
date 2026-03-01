@@ -13,7 +13,7 @@ async function testCreateProduct() {
         const password = 'password123';
 
         try {
-            await axios.post('http://localhost:3000/api/auth/register', {
+            await axios.post('https://campusmarketdeploy.onrender.com/api/auth/register', {
                 Nombre: 'Test',
                 Apellido_Paterno: 'Vendor',
                 Apellido_Materno: 'User',
@@ -28,7 +28,7 @@ async function testCreateProduct() {
         }
 
         // LOGIN
-        const loginRes = await axios.post('http://localhost:3000/api/auth/login', {
+        const loginRes = await axios.post('https://campusmarketdeploy.onrender.com/api/auth/login', {
             Email: email,
             Contrasena: password
         });
@@ -37,7 +37,7 @@ async function testCreateProduct() {
 
         // CREATE PRODUCT WITHOUT IMAGE
         try {
-            await axios.post('http://localhost:3000/api/products', {
+            await axios.post('https://campusmarketdeploy.onrender.com/api/products', {
                 Nombre: 'Test Product No Image',
                 Precio: 100,
                 ID_Categoria: 1,
@@ -60,7 +60,7 @@ async function testCreateProduct() {
         fs.writeFileSync('test_image.jpg', 'dummy content');
         form.append('image', fs.createReadStream('test_image.jpg'));
 
-        const createRes = await axios.post('http://localhost:3000/api/products', form, {
+        const createRes = await axios.post('https://campusmarketdeploy.onrender.com/api/products', form, {
             headers: {
                 Authorization: `Bearer ${token}`,
                 ...form.getHeaders()

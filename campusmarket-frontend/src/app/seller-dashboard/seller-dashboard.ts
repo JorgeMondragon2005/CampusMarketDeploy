@@ -94,7 +94,7 @@ export class SellerDashboardComponent implements OnInit {
   loadProfile() {
     this.sellerService.getSellerProfile().subscribe({
       next: (data: any) => {
-        if (data.foto) this.profilePhotoUrl = `http://localhost:3000/uploads/${data.foto}`;
+        if (data.foto) this.profilePhotoUrl = `https://campusmarketdeploy.onrender.com/uploads/${data.foto}`;
         if (data.nombre_tienda) this.sellerName = data.nombre_tienda;
         if (data.descripcion) this.sellerDescription = data.descripcion;
       },
@@ -199,7 +199,7 @@ export class SellerDashboardComponent implements OnInit {
     if (file) {
       this.sellerService.uploadPhoto(file).subscribe({
         next: (res: any) => {
-          this.profilePhotoUrl = `http://localhost:3000/uploads/${res.photoUrl}?t=${Date.now()}`;
+          this.profilePhotoUrl = `https://campusmarketdeploy.onrender.com/uploads/${res.photoUrl}?t=${Date.now()}`;
           alert('¡Foto de perfil actualizada!');
         },
         error: () => alert('Error al subir foto')

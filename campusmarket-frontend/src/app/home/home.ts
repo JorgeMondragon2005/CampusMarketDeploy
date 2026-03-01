@@ -25,7 +25,7 @@ export class Home implements OnInit {
   searchTerm: string = '';
 
   cartCount: number = 0;
-  apiUrl: string = 'http://localhost:3000';
+  apiUrl: string = 'https://campusmarketdeploy.onrender.com';
   currentTheme: string; // Add currentTheme property
 
   constructor(
