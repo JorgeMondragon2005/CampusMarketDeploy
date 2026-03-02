@@ -84,4 +84,12 @@ router.delete(
     sellerController.deleteProduct
 );
 
+// Actualizar estado del vendedor (Activo / Inactivo)
+router.put(
+    '/status',
+    protect,
+    restrictTo('Vendedor'),
+    sellerController.updateSellerStatus
+);
+
 module.exports = router;

@@ -80,7 +80,7 @@ exports.createProduct = async (req, res) => {
 exports.getPublicCatalog = async (req, res) => {
     try {
         // Filtering: If the user is logged in, we might want to hide their own products
-        let filterClause = 'p."Activo" = true';
+        let filterClause = 'p."Activo" = true AND COALESCE(v."Estado_Vendedor", \'Activo\') = \'Activo\'';
         const params = [];
 
         if (req.user && req.user.ID_Usuario) {

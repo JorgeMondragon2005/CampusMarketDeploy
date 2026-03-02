@@ -177,12 +177,11 @@ exports.getSellerProfile = async (req, res) => {
             return res.status(404).json({ message: 'Perfil de vendedor no encontrado.' });
         }
 
-        // Devolvemos los datos para pintar el Sidebar
         // Devolvemos los datos para pintar el Sidebar y el Dashboard
         res.status(200).json({
             nombre_tienda: vendorProfile.Nombre_Tienda,
-            foto: vendorProfile.Foto_Perfil, // Si el vendedor tiene una específica
-            imagen_url: req.user.Imagen_URL, // De la tabla usuario
+            foto: vendorProfile.Foto_Perfil,
+            imagen_url: req.user.Imagen_URL,
             banner_url: vendorProfile.Banner_URL,
             descripcion: vendorProfile.Descripcion_Tienda,
             numero_tarjeta: vendorProfile.Numero_Tarjeta,
@@ -190,7 +189,8 @@ exports.getSellerProfile = async (req, res) => {
             nombre_cuenta: vendorProfile.Nombre_Cuenta,
             paypal_email: vendorProfile.PayPal_Email,
             transferencia_activo: vendorProfile.Transferencia_Activo,
-            paypal_activo: vendorProfile.PayPal_Activo
+            paypal_activo: vendorProfile.PayPal_Activo,
+            estado_vendedor: vendorProfile.Estado_Vendedor || 'Activo'
         });
 
     } catch (error) {
@@ -355,5 +355,40 @@ exports.getAdvancedStats = async (req, res) => {
     } catch (error) {
         console.error('Error en getAdvancedStats:', error);
         res.status(500).json({ message: 'Error al obtener estadísticas avanzadas.' });
+    }
+};
+
+/**
+ * 9. Actualizar Estado del Vendedor (Activo <-> Inactivo)
+ * Solo el vendedor puede cambiar entre Activo e Inactivo.
+ * El estado 'Penalizado' solo puede ser asignado por un administrador.
+ */
+exports.updateSellerStatus = async (req, res) => {
+    try {
+        const { estado } = req.body;
+
+        // Solo se permite cambiar a Activo o Inactivo (no Penalizado desde aquí)
+        if (!['Activo', 'Inactivo'].includes(estado)) {
+            return res.status(400).json({ message: 'Estado inválido. Solo puede ser Activo o Inactivo.' });
+        }
+
+        const vendorProfile = await User.findVendorProfileByUserId(req.user.ID_Usuario);
+        if (!vendorProfile) return res.status(404).json({ message: 'Vendedor no encontrado.' });
+
+        // No permitir cambiar si está Penalizado
+        const currentStatus = vendorProfile.Estado_Vendedor || 'Activo';
+        if (currentStatus === 'Penalizado') {
+            return res.status(403).json({ message: 'Tu cuenta está penalizada. Contacta al administrador.' });
+        }
+
+        await pool.query(
+            'UPDATE vendedor SET "Estado_Vendedor" = $1 WHERE "ID_Vendedor" = $2',
+            [estado, vendorProfile.ID_Vendedor]
+        );
+
+        res.status(200).json({ message: `Estado actualizado a ${estado}.`, estado });
+    } catch (error) {
+        console.error('Error en updateSellerStatus:', error);
+        res.status(500).json({ message: 'Error interno.' });
     }
 };
