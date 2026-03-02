@@ -193,26 +193,30 @@ exports.updateProduct = async (req, res) => {
         }
         // -------------------------------------------------------------------------------
 
-        // Lógica de Notificación de Re-stock
-        const newStock = updateData.Stock || updateData.stock || 0;
-        if (oldStock === 0 && newStock > 0) {
-            const Notification = require('../models/Notification');
-            const { rows: favoritedBy } = await pool.query('SELECT "ID_Usuario" FROM favoritos WHERE "ID_Producto" = $1', [productId]);
+        // Lógica de Notificación de Re-stock y Auto-ocultar
+        // IMPORTANT: Only run stock-based logic if Stock was explicitly sent in the request
+        const stockProvided = updateData.Stock !== undefined || updateData.stock !== undefined;
+        if (stockProvided) {
+            const newStock = updateData.Stock || updateData.stock || 0;
+            if (oldStock === 0 && newStock > 0) {
+                const Notification = require('../models/Notification');
+                const { rows: favoritedBy } = await pool.query('SELECT "ID_Usuario" FROM favoritos WHERE "ID_Producto" = $1', [productId]);
 
-            for (const fav of favoritedBy) {
-                await Notification.create({
-                    ID_Usuario: fav.ID_Usuario,
-                    Tipo: 'STOCK_ALERT',
-                    Mensaje: `¡Buenas noticias! El producto "${oldProductRows[0].Nombre}" que tenías en favoritos vuelve a estar disponible.`,
-                    ID_Referencia: productId
-                });
+                for (const fav of favoritedBy) {
+                    await Notification.create({
+                        ID_Usuario: fav.ID_Usuario,
+                        Tipo: 'STOCK_ALERT',
+                        Mensaje: `¡Buenas noticias! El producto "${oldProductRows[0].Nombre}" que tenías en favoritos vuelve a estar disponible.`,
+                        ID_Referencia: productId
+                    });
+                }
             }
-        }
 
-        // Lógica de Auto-ocultar si stock es cero
-        if (newStock <= 0) {
-            await pool.query('UPDATE producto SET "Activo" = FALSE WHERE "ID_Producto" = $1', [productId]);
-            console.log(`[ProductUpdate] Producto ${productId} autodesactivado por stock cero.`);
+            // Auto-ocultar solo si se mandó stock explícitamente y es cero
+            if (newStock <= 0) {
+                await pool.query('UPDATE producto SET "Activo" = FALSE WHERE "ID_Producto" = $1', [productId]);
+                console.log(`[ProductUpdate] Producto ${productId} autodesactivado por stock cero.`);
+            }
         }
 
         res.status(200).json({ message: 'Producto actualizado.' });
