@@ -5,11 +5,12 @@ const transporter = nodemailer.createTransport({
     port: 587,
     secure: false, // STARTTLS
     requireTLS: true,
+    family: 4, // Force IPv4 - Render uses IPv6 by default which Gmail blocks
     auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_APP_PASSWORD
     },
-    connectionTimeout: 10000, // 10 segundos
+    connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
     tls: {
