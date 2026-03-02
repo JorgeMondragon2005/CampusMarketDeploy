@@ -79,8 +79,7 @@ exports.createProduct = async (req, res) => {
  */
 exports.getPublicCatalog = async (req, res) => {
     try {
-        // Filtering: If the user is logged in, we might want to hide their own products
-        let filterClause = 'p."Activo" = true AND COALESCE(v."Estado_Vendedor", \'Activo\') = \'Activo\'';
+        let filterClause = 'p."Activo" = true';
         const params = [];
 
         if (req.user && req.user.ID_Usuario) {
@@ -91,7 +90,7 @@ exports.getPublicCatalog = async (req, res) => {
             }
         }
 
-        const query = `
+        const buildQuery = (extraFilter) => `
             SELECT 
                 p.*, 
                 c."Nombre" AS "Categoria_Nombre",
@@ -111,10 +110,23 @@ exports.getPublicCatalog = async (req, res) => {
                 FROM calificacion_producto
                 GROUP BY "ID_Producto"
             ) stats ON p."ID_Producto" = stats."ID_Producto"
-            WHERE ${filterClause}
+            WHERE ${filterClause}${extraFilter}
             ORDER BY p."ID_Producto" DESC
         `;
-        const { rows: catalog } = await pool.query(query, params);
+
+        let catalog;
+        try {
+            // Intentar con filtro de estado (requiere columna Estado_Vendedor)
+            const statusFilter = ` AND COALESCE(v."Estado_Vendedor", 'Activo') = 'Activo'`;
+            const { rows } = await pool.query(buildQuery(statusFilter), params);
+            catalog = rows;
+        } catch (colErr) {
+            // Si la columna no existe aún, usar query sin filtro de estado
+            console.warn('Estado_Vendedor column not found, falling back to basic query:', colErr.message);
+            const { rows } = await pool.query(buildQuery(''), params);
+            catalog = rows;
+        }
+
         res.json(catalog);
     } catch (error) {
         console.error('Error en getPublicCatalog:', error);
