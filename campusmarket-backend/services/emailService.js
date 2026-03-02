@@ -1,30 +1,12 @@
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // STARTTLS
-    requireTLS: true,
-    family: 4, // Force IPv4 - Render uses IPv6 by default which Gmail blocks
-    auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-    tls: {
-        rejectUnauthorized: false
-    }
-});
+const https = require('https');
 
 const sendVerificationEmail = async (email, code) => {
-    try {
-        await transporter.sendMail({
-            from: `CampusMarket <${process.env.GMAIL_USER}>`,
-            to: email,
+    return new Promise((resolve, reject) => {
+        const body = JSON.stringify({
+            sender: { name: 'CampusMarket', email: 'jorgemondra242@gmail.com' },
+            to: [{ email: email }],
             subject: 'Código de Verificación - CampusMarket',
-            html: `
+            htmlContent: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
                     <h2 style="color: #027839; text-align: center;">CampusMarket</h2>
                     <p>Hola,</p>
@@ -40,13 +22,46 @@ const sendVerificationEmail = async (email, code) => {
             `
         });
 
-        console.log('📧 Correo enviado por Gmail a:', email);
-        return true;
-    } catch (error) {
-        console.error('❌ Error enviando correo por Gmail:', error);
-        console.log('⚠️ [DEV MODE] Código de verificación para', email, 'es:', code);
-        return false;
-    }
+        const options = {
+            hostname: 'api.brevo.com',
+            path: '/v3/smtp/email',
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': process.env.BREVO_API_KEY,
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(body)
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode >= 200 && res.statusCode < 300) {
+                    console.log('📧 Correo enviado por Brevo a:', email);
+                    resolve(true);
+                } else {
+                    console.error('❌ Error Brevo:', res.statusCode, data);
+                    resolve(false);
+                }
+            });
+        });
+
+        req.on('error', (err) => {
+            console.error('❌ Error de conexión Brevo:', err);
+            resolve(false);
+        });
+
+        req.setTimeout(15000, () => {
+            console.error('❌ Timeout Brevo');
+            req.destroy();
+            resolve(false);
+        });
+
+        req.write(body);
+        req.end();
+    });
 };
 
 module.exports = { sendVerificationEmail };
