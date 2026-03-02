@@ -157,7 +157,7 @@ exports.createOrder = async (req, res) => {
         }
 
         // --- Validación 3: Verificación Real de PayPal (Server-to-Server) ---
-        if (Metodo_Pago === 'PayPal') {
+        if (Metodo_Pago === 'PayPal' || Metodo_Pago === 'paypal') {
             if (!PayPal_Transaction_ID) {
                 return res.status(400).json({ message: 'Se requiere PayPal_Transaction_ID para este método de pago.' });
             }
@@ -233,9 +233,9 @@ exports.createOrder = async (req, res) => {
         const qrToken = crypto.randomBytes(3).toString('hex').toUpperCase();
 
         // --- Establecer Estado Inicial ---
-        const estadoInicial = Metodo_Pago === 'PayPal' ? 'Autorizado' : 'Pendiente';
+        const estadoInicial = (Metodo_Pago === 'PayPal' || Metodo_Pago === 'paypal') ? 'Autorizado' : 'Pendiente';
 
-        console.log(`[OrderDebug] Registrando pedido en DB: Vendedor ${ID_Vendedor}, Comprador ${idComprador}, Total: ${precioTotalCalculado}, PayPal ID: ${PayPal_Transaction_ID}, Estado: ${estadoInicial}, Code: ${qrToken}`);
+        console.log(`[OrderDebug] Registrando pedido en DB: Vendedor ${ID_Vendedor}, Comprador ${idComprador}, Total: ${precioTotalCalculado}, Metodo: ${Metodo_Pago}, PayPal ID: ${PayPal_Transaction_ID || 'N/A'}, Estado: ${estadoInicial}, Code: ${qrToken}`);
 
         // --- Ejecución de la Transacción ---
         const newPedidoId = await Order.create({
